@@ -1,0 +1,164 @@
+---
+- name: Nexus
+  hosts: localhost
+  become: yes
+
+  vars:
+    nexus_version: '3.1.0-04'
+    nexus_timezone: 'UTC'
+    #nexus_admin_password: "{{ vault_nexus_admin_password }}"
+    #httpd_server_name: 'nexus.vm'
+    #httpd_setup_enable: false
+    #httpd_ssl_certificate_file: "{{ vault_httpd_ssl_certificate_file }}"
+    #httpd_ssl_certificate_key_file: "{{ vault_httpd_ssl_certificate_key_file }}"
+    #ldap_connections:
+      #- ldap_name: 'Company LDAP'
+       # ldap_protocol: 'ldaps'
+        #ldap_hostname: 'ldap.company.com'
+        #ldap_port: 636
+        #ldap_search_base: 'dc=company,dc=net'
+        #ldap_user_base_dn: 'ou=users'
+        #ldap_user_object_class: 'inetOrgPerson'
+        #dap_user_id_attribute: 'uid'
+        #ldap_user_real_name_attribute: 'cn'
+        #ldap_user_email_attribute: 'mail'
+        #ldap_group_base_dn: 'ou=groups'
+        #ldap_group_object_class: 'posixGroup'
+        #ldap_group_id_attribute: 'cn'
+        #ldap_group_member_attribute: 'memberUid'
+        #ldap_group_member_format: '${username}'
+    nexus_content_selectors:
+      - name: docker-login
+        description: Selector for docker login privilege
+        search_expression: format=="docker" and path=~"/v2/"
+      - name: docker-search
+        description: Selector for docker search privilege
+        search_expression: format == "docker" and path == "/v1/search"
+        repository: '*'
+        actions:
+        - read
+        - browse
+
+    nexus_privileges:
+      - name: all-repos-read
+        description: 'Read & Browse access to all repos'
+        repository: '*'
+        actions:
+          - read
+          - browse
+      - name: beon-project-deploy
+        description: 'Deployments to beon-project'
+        repository: beon-project
+        actions:
+          - add
+          - edit
+
+      - name: docker-group
+        description: 'Deployment to docker group'
+        repository: docker-group
+        actions:
+          - add
+          - edit
+
+    nexus_roles:
+      - id: Developpers # maps to the LDAP group
+        name: developers
+        description: All developers
+        privileges:
+          - nx-search-read
+          - all-repos-read
+          - beon-project-deploy
+        roles: []
+
+      - id: teamA-developers # maps to the LDAP group
+        name: teamA-developers
+        description:  Team A developers
+        privileges:
+          - nx-search-read
+          - nx-roles-read
+          - all-repos-read
+          - beon-project-deploy
+        roles: []
+      - id: teamB- testers
+        name: teamB- testers
+        description: Team B testers
+        privileges:
+          - nx-roles-read
+          - all-repos-read
+          - beon-project-deploy          
+
+      
+    nexus_local_users:
+      - username: jenkins # used as key to update
+        first_name: Jenkins
+        last_name: CI
+        email: support@company.com
+        password: !vault |
+          $ANSIBLE_VAULT;1.1;AES256
+          35613965356632366631396130613137376533626636316232653161306134336237303032636430
+          3663636535323639666330363566343064346237386666640a303732336461393464626164373837
+          61656632643035666135373332653962666562363866353235666637666533666662386334343438
+          3762646231666232610a356134353666626439383663396432643135616231373066353133393031
+          3438
+        roles:
+          - Developpers # role ID here
+      - username: testuser
+        first_name: Test
+        last_name: user
+        email: testuser@company.com
+        password: !vault |
+          $ANSIBLE_VAULT;1.1;AES256
+          38643461663837636366303666633138343566353731633236613437353834343736626339386132
+          3532356637336263383636366336383033666333393938350a653132386630303331316438656563
+          61376332336238613736333733363135353861373139656661303936353939383066343566336433
+          6134346664353635610a373061353533386266366634616162376630656238643035393466613732
+          3266
+        roles:
+          - Developpers
+
+    nexus_blobstores:
+      - name: beon-artifacts
+        path: /var/nexus/blobs/beon-artifacts
+
+    nexus_scheduled_tasks:
+      - name: compact-blobstore
+        cron: '0 0 22 * * ?'
+        typeId: blobstore.compact
+        taskProperties:
+          blobstoreName: 'beon-artifacts'
+
+    nexus_repos_maven_proxy:
+      - name: central
+        remote_url: 'https://repo1.maven.org/maven2/'
+        layout_policy: permissive
+      - name: alfresco
+        remote_url: 'https://artifacts.alfresco.com/nexus/content/groups/private/'
+        remote_username: 'secret-username'
+        remote_password: 'secret'
+      - name: jboss
+        remote_url: 'https://repository.jboss.org/nexus/content/groups/public-jboss/'
+      - name: vaadin-addons
+        remote_url: 'https://maven.vaadin.com/vaadin-addons/'
+      - name: jaspersoft
+        remote_url: 'https://jaspersoft.artifactoryonline.com/jaspersoft/jaspersoft-repo/'
+        version_policy: mixed
+
+    nexus_repos_maven_hosted:
+      - name: beon-project
+        version_policy: mixed
+        write_policy: allow
+        blob_store: beon-artifacts
+        
+    nexus_repos_maven_group:
+      - name: public
+        member_repos:
+          - central
+          - jboss
+          - vaadin-addons
+          - jaspersoft
+
+  roles:
+    - geerlingguy.java
+    - geerlingguy.apache
+    - nexus3-oss
+    
